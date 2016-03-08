@@ -1052,7 +1052,7 @@ namespace WindowsFormsApplication2
             int loop=1;
             while((Exist_COM[loop] != null)&&(loop<= Convert.ToInt32(Exist_COM[0])))
             {
-                
+                Test_port(Exist_COM[loop]);
             }
         }
 
