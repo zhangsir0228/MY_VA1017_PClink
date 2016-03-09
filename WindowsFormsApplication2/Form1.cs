@@ -51,6 +51,7 @@ namespace WindowsFormsApplication2
 
         string saveFileName;
         String  strT;
+        string IDN = "*IDN?";
         string  B_READ = "READ?\r\n";
         String  B_SN = "SN:";
         String  B_DA = "DA:";  
@@ -559,10 +560,8 @@ namespace WindowsFormsApplication2
 
             Thread.Sleep(600);//wait for data
 
-            HIS_Nday = 0;
-            
-            strT = SpCom.ReadExisting();
-    
+            HIS_Nday = 0;            
+            strT = SpCom.ReadExisting();   
             if (strT.Length > 12)//判断接收到的数据是否够长度
             {
                 #region 如果接受到的是数据字符串
@@ -620,7 +619,6 @@ namespace WindowsFormsApplication2
                 }
                 #endregion
                 //tChart1.Axes.left
-
                 #region 如果接受到的是历史数据
                     //HS:  1day:1339us/cm,30.2degC,     0L
                     //HS:  2day: 396us/cm,29.1degC,  1409L/r/n    一共38个字符
@@ -680,7 +678,6 @@ namespace WindowsFormsApplication2
                 }
                 #endregion
             }
-
            if(strT.IndexOf("SN")>0) strT.IndexOf(strT);
 
            #region refresh teechart
@@ -727,10 +724,8 @@ namespace WindowsFormsApplication2
            textBox1.Invoke(CrossDelete);
            #endregion
 
-           Data_recevie = 1;
-       
+           Data_recevie = 1;     
         }
-
         #region 导出数据
         /// <summary>
         /// 导出数据
@@ -751,7 +746,6 @@ namespace WindowsFormsApplication2
             return true;
         }
         #endregion
-
         #region 创建文件（文件存在则跳过）
         /// <summary>
         /// 创建文件（文件存在则跳过）
@@ -781,8 +775,6 @@ namespace WindowsFormsApplication2
         }
         #endregion
       
-
-
         private void trackBar1_ValueChanged(object source, EventArgs e)//interval set
         {
             trackBar1_Pos = trackBar1.Value;    //取得当前位置
@@ -792,8 +784,7 @@ namespace WindowsFormsApplication2
             label3.Text = Convert.ToString(trackBar1.Value * 2);//
             //label3.Text = trackBar1.Value.ToString();
             textBox2.Text = DateTime.Now.ToString();//调用内容，并用lable1显示出来。。。
-        }
-       
+        }    
         private void timer1_Tick(object sender, EventArgs e)//定时向下位机发送read指令读取数据
         {
             if (PortIsOpen == 1)
@@ -802,18 +793,14 @@ namespace WindowsFormsApplication2
             }
 
         }
-
         private void dataGridView1_CellContentClick(object sender, DataGridViewCellEventArgs e)
         {
 
         }
-
         private void tChart1_Click(object sender, EventArgs e)
         {
 
         }
-
-
         public int PORTISOPEN
         {
             get { return this.PortIsOpen; }
@@ -834,9 +821,8 @@ namespace WindowsFormsApplication2
             get { return this.set_COMport; }
             set { this.set_COMport = value; }
         }
-
         //
-        public void ConfigComport(string com, int interval)
+        public void ConfigComport(string com, int interval,bool IsWork)
         {
             if (Reconfig != 0)
             {
@@ -860,8 +846,7 @@ namespace WindowsFormsApplication2
             SpCom.Open();
             PortIsOpen = 1;
             SpCom.Write("open the COM port "+com+" !");
-            timer1.Enabled = true;
-
+            timer1.Enabled = IsWork;
         }
 
         #region Menu click
@@ -912,7 +897,6 @@ namespace WindowsFormsApplication2
         }
 
         #endregion
-
         private void button1_Click(object sender, EventArgs e)//open the commport
         {
             if (SpCom.IsOpen)
@@ -960,7 +944,6 @@ namespace WindowsFormsApplication2
             }
             #endregion
         }
-
         private void button2_Click(object sender, EventArgs e)//clear
          { 
              //SpCom.Write(textBox2.Text);
@@ -969,7 +952,6 @@ namespace WindowsFormsApplication2
              fastLine3.Clear();
 
          }
-
         private void button3_Click(object sender, EventArgs e)//enable form2
          {
              //Form currentForm =Form.ActiveForm;
@@ -980,7 +962,6 @@ namespace WindowsFormsApplication2
              Fm2.Enabled = true;
 
          } 
-
         private void button4_Click(object sender, EventArgs e)
          {
              SpCom.Write("READ:HIST\r\n");
@@ -988,7 +969,6 @@ namespace WindowsFormsApplication2
              button4.Enabled = false;
              button5.Enabled = false;
          }
- 
         private void button5_Click(object sender, EventArgs e)
         {
             if (IsRead==0)
@@ -1021,7 +1001,6 @@ namespace WindowsFormsApplication2
                 //#endregion
             }
         }
-
         private void timer2_Tick(object sender, EventArgs e)
         {
             if (Data_recevie == 1)
@@ -1053,13 +1032,24 @@ namespace WindowsFormsApplication2
             while((Exist_COM[loop] != null)&&(loop<= Convert.ToInt32(Exist_COM[0])))
             {
                 Test_port(Exist_COM[loop]);
+                //test
             }
+
+            var serialports = this.Controls.OfType<SerialPort>();
+            for (int i = 1; i < serialports.Count(); i++)
+            {
+                serialports.ElementAt(i).
+            }
+
         }
 
         //测试某个串口是否是当前需要找的
         private bool Test_port(string com)
         {
-            
+           
+            ConfigComport(com, 2000, false);//打开串口不开启定时读取
+            SpCom.Write(IDN);
+
 
             return false;
         }
@@ -1068,7 +1058,6 @@ namespace WindowsFormsApplication2
         {
 
         }
-
 
         #region click to change skin theme
         private void button6_Click(object sender, EventArgs e)
