@@ -48,21 +48,24 @@ namespace WindowsFormsApplication2
 
     public partial class Form1 : Form, IMdiParent
     {
+        string Vendor = "";
+        string Model = "";
+        string SN = "";
+        int refreshModel = 0;
 
         string saveFileName;
         String  strT;
-        string IDN = "*IDN?";
+        string IDN = "*IDN?\r\n";
         string  B_READ = "READ?\r\n";
         String  B_SN = "SN:";
         String  B_DA = "DA:";  
-          
+        string  PortTesting = "null";//改标志大于0时表示当前正在测试数值对应的COMx端口  
+
         string  set_COMport = "";//COMport from set form
         int     set_Interval = 2;//interval from set form
-        //string  COMport = "";//using COMport
-        //int     Interval = 2000;//using Interval
 
         MatchCollection vMatchs;
-        String[] vfloats = new String[4];
+        String[] vfloats = new String[100];
         int     PortIsOpen = 0;
         int trackBar1_Pos = 2000;
         int ReDraw = 0;//refresh the fastline1
@@ -90,7 +93,13 @@ namespace WindowsFormsApplication2
         int HIS_readed;//got the HIS data
         int Data_recevie = 0;
 
+        int workState = 0;//1 read   2:history
+
         int Reconfig = 0;//Reconfig the comport.
+
+        static int Start = 0;
+        static int NormalRead = 1;
+        static int HistoryRead = 2;
 
         //test data
         double[] tmp_Yvalue = { 1.2, 1.5, 1.9, 2.6, 2.9, 2.7, 3, 3.5, 4.8, 1.9, 8.5, 8.9, 8.6, 5.9, 5.7, 11, 13.5, 14.8, 11.2, 11.5, 11.9, 12.6, 12.9, 12.7, 13, 13.5, 14.8, 11.2, 11.5, 11.9, 22.6, 22.9, 22.7, 23, 23.5, 24.8 };
@@ -135,17 +144,31 @@ namespace WindowsFormsApplication2
 
         private void Form1_Load(object sender, EventArgs e)
         {
+            SetFlag(Start);//配置初始各状态位
+
+            tChart1.Zoom.Allow = true;
+
 
             #region Comport Init
             int loop = 0;
             foreach (string s in SerialPort.GetPortNames())
-            {
-                loop++;
-                Exist_COM[loop] = s;
-                if (Exist_COM[loop] != null) { Exist_COM[0] = loop.ToString(); }
-                comboBox1.Items.Add(s);
+            {                           
+                SerialPort tempPort = new SerialPort(s);
+                try
+                {
+                    tempPort.Open();
+                    if (tempPort.IsOpen)//跳过已经打开的端口
+                    {
+                        tempPort.Close();
+                        loop++;
+                        Exist_COM[loop] = s;
+                        if (Exist_COM[loop] != null) { Exist_COM[0] = loop.ToString(); }                       
+                    }
+                    else{; }                
+                }
+                catch//若已经打开则跳过该端口
+                {; }        
             }
-            comboBox1.SelectedIndex = 0;
 
             SpCom.PortName = "COM3";
             SpCom.BaudRate = 9600;
@@ -154,9 +177,6 @@ namespace WindowsFormsApplication2
             SpCom.DataReceived += new SerialDataReceivedEventHandler(SpCom_DataReceived);
 
             timer2.Enabled = false;
-            button3.Enabled = false;
-            button4.Enabled = false;
-            button5.Enabled = false;
 
             #endregion
 
@@ -336,8 +356,8 @@ namespace WindowsFormsApplication2
             newY = double.Parse(vfloats[2]);
             fastLine3.Add(newX, newY);
             
-            if (this.fastLine1.Count > 20)
-            { fastLine1.GetHorizAxis.SetMinMax(StartDate, DateTime.Now.AddSeconds(10)); 
+            if (((this.fastLine1.Count) % 20) == 0)//每二十个数据更新一次坐标
+            { fastLine1.GetHorizAxis.SetMinMax(StartDate, DateTime.Now.AddSeconds(SetForm_interval*(20+ this.fastLine1.Count*0.05))); 
             }
             
 
@@ -407,11 +427,14 @@ namespace WindowsFormsApplication2
             newY = double.Parse(HIS_ToL[loop]);
             fastLine3.Add(newX, newY);
 
-            if (this.fastLine1.Count > 20)
+            //if (this.fastLine1.Count > 20)
+            //{
+            //    fastLine1.GetHorizAxis.SetMinMax(1, loop);
+            //}
+            if (((this.fastLine1.Count) % 20) == 0)//每二十个数据更新一次坐标
             {
-                fastLine1.GetHorizAxis.SetMinMax(1, loop);
+                fastLine1.GetHorizAxis.SetMinMax(StartDate, DateTime.Now.AddSeconds(SetForm_interval * (20 + this.fastLine1.Count * 0.05)));
             }
-
 
             chart.AutoRepaint = true;
             chart.Refresh();
@@ -551,22 +574,40 @@ namespace WindowsFormsApplication2
             //关闭串口 
             SpCom.Close();
         }
-
-        
+      
         private delegate void CrossThreadOperationControl();
-        private void SpCom_DataReceived(object sender,
-                    System.IO.Ports.SerialDataReceivedEventArgs e)
+
+        /// <summary>
+        /// 正常工作时的串口中断
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
+        public void SpCom_DataReceived(object sender,
+                         System.IO.Ports.SerialDataReceivedEventArgs e)
         {
 
-            Thread.Sleep(600);//wait for data
-
-            HIS_Nday = 0;            
-            strT = SpCom.ReadExisting();   
-            if (strT.Length > 12)//判断接收到的数据是否够长度
+            if (workState == 2)//历史数据读取时等待长一点时间
             {
+                Thread.Sleep(5000);//wait for data
+            }
+            else
+            {
+                Thread.Sleep(50);//wait for data
+            }
+
+            try
+            {
+                strT = SpCom.ReadExisting();
+            }
+            catch
+            {
+                ;
+            }
+            
+
+            if (strT.Length > 12)//判断接收到的数据是否够长度
+            { 
                 #region 如果接受到的是数据字符串
-           
-                
                 if (strT.Substring(0, 3) == "DA:")
                 {
                     DateCount = DateCount + 1;
@@ -575,7 +616,7 @@ namespace WindowsFormsApplication2
                     //string sss = "1 2 3";
                     MatchCollection vMatchs = Regex.Matches(strT, @"-?\d+(\.\d+)?");
                     //String[] vfloats = new String[vMatchs.Count];//initialized to 3
-                    for (int i = 0; i < vMatchs.Count; i++)
+                    for (int i = 0; i < vMatchs.Count; i++)//这里注意增加数组越界
                     {
                         vfloats[i] = /*float.Parse*/(vMatchs[i].Value);
                     }
@@ -618,12 +659,11 @@ namespace WindowsFormsApplication2
                     ReDraw = 1;
                 }
                 #endregion
-                //tChart1.Axes.left
                 #region 如果接受到的是历史数据
-                    //HS:  1day:1339us/cm,30.2degC,     0L
-                    //HS:  2day: 396us/cm,29.1degC,  1409L/r/n    一共38个字符
+                //HS:  1day:1339us/cm,30.2degC,     0L
+                //HS:  2day: 396us/cm,29.1degC,  1409L/r/n    一共38个字符
 
-                if (strT.Substring(0, 13) == "OK READ:HIST!")
+                else if (strT.Substring(0, 13) == "OK READ:HIST!")
                 {
                     HIS_Nday = 0;
 
@@ -635,20 +675,18 @@ namespace WindowsFormsApplication2
                     this.tChart1.Axes.Bottom.Automatic = true;
                     this.fastLine1.XValues.DateTime = false;
                     tChart1.Axes.Bottom.Labels.ValueFormat = "#";
-                    
+
                     fastLine1.Clear();//clear data
                     fastLine2.Clear();
                     fastLine3.Clear();
 
                     strT = strT.Substring(15);
-
-                    for(HIS_loop=1;HIS_loop<2000;HIS_loop++)//get HIS data
+                    #region  get HIS data
+                    for (HIS_loop = 1; HIS_loop < 2000; HIS_loop++)//get HIS data
                     {
                         if (strT.Substring(0, 3) == "HS:")
                         {
-                            
-                            HIST_temp=strT.Substring(0,37);
-
+                            HIST_temp = strT.Substring(0, 37);
                             MatchCollection vMatchs = Regex.Matches(HIST_temp, @"-?\d+(\.\d+)?");
                             //String[] vfloats = new String[vMatchs.Count];//initialized to 3
                             for (int i = 0; i < vMatchs.Count; i++)
@@ -659,72 +697,107 @@ namespace WindowsFormsApplication2
                             HIS_con[HIS_loop] = vMatchs[1].Value;
                             HIS_tmp[HIS_loop] = vMatchs[2].Value;
                             HIS_ToL[HIS_loop] = vMatchs[3].Value;
-
                             HIS_Nday++;
-
                         }
-                        else{break;}
-                        if (strT.Length > 37)
+                        else
+                        {
+                            workState = 3;//从开始读历史状态进入确认读取历史书状态
+                            break;
+                        }
+
+                        if (strT.Length >= 37)
                         {
                             strT = strT.Substring(38);
                         }
-                        if (strT.Length < 37) { break; }
-                       
+                        if (strT.Length < 37)
+                        {
+                            workState = 3;//从开始读历史状态进入确认读取历史书状态
+                            break;
+                        }
+
                     }
                     // string  HIST_data[365][4];//用于存放历史数据
                     //string  HIST_temp;//暂存每天的历史数据
                     //int     HIST_day;//用于历史数据的计数，存放在历史数据数组的第一位
-
+                    #endregion
                 }
                 #endregion
+                #region 接受到机器型号信息
+                else if (strT.Substring(0, 6) == "SN:V&A")
+                {
+                    //读取到设备信息，也用作开始的设备查找
+                    string[] arrTemp = strT.Split(',');
+                    Vendor = arrTemp[0].Substring(3, 3);
+                    Model = arrTemp[1];
+                    SN = arrTemp[2];
+                    refreshModel = 1;
+                    timer1.Enabled = true;
+                    timer1.Start();
+                    //收到此数据只能是在菜单中手动设置开始，故将各按键和状态位配置为正常工作状态
+                    if (workState != 2) { workState = 1; }
+                    //else { workState = 3; }//从开始读历史状态进入确认读取历史书状态
+                }
+                #endregion
+                else if(workState == 2)
+                {
+                    
+                    workState = 4;
+                }
             }
-           if(strT.IndexOf("SN")>0) strT.IndexOf(strT);
-
-           #region refresh teechart
-           // 将代理实例化为一个匿名代理 
-           CrossThreadOperationControl CrossDelete = delegate()
-           {
-               textBox1.Text +=Convert.ToString(DateCount) + strT; 
-               this.textBox1.Focus();//获取焦点
-               this.textBox1.Select(this.textBox1.TextLength, 0);//光标定位到文本最后
-               this.textBox1.ScrollToCaret();//滚动到光标处
-               textBox2.Text += Convert.ToString(SpCom.ReceivedBytesThreshold);
-               //ReceivedBytesThreshold
-
-               #region 更新datagridview1
-               DataSet xmlDs = new DataSet();
-               try
-               {
-                   xmlDs.ReadXml(".\\DateRecive//" + saveFileName);
-               }
-               catch (Exception ex)
-               {
-                   MessageBox.Show(ex.ToString());
-                   return;
-               }
-               this.dataGridView1.DataSource = xmlDs.Tables[0].DefaultView;
-               //移动光标至末行
-               dataGridView1.CurrentCell = dataGridView1.Rows[dataGridView1.Rows.Count - 1].Cells[0];
-               //dataGridView1.BeginEdit(true);
-               //dataGridView1.FirstDisplayedScrollingRowIndex = dataGridView1.Count - 1;
-               #endregion
-               if (ReDraw == 1)//更新tchart
-               {
-                   AnimateSeries(this.tChart1);
-               }
-               if (HIS_Nday > 0)
-               {
-                   for (HIS_loop = 1; HIS_loop < HIS_Nday; HIS_loop++)
-                   {
-                       AnimateSeriesHIST(this.tChart1, HIS_loop);
-                   }
-               }
-           };
-           //timer1.Enabled = true;
-           textBox1.Invoke(CrossDelete);
-           #endregion
-
-           Data_recevie = 1;     
+            #region refresh teechart
+            // 将代理实例化为一个匿名代理 
+            CrossThreadOperationControl CrossDelete = delegate ()
+            {
+                textBox1.Text += Convert.ToString(DateCount) + strT;
+                this.textBox1.Focus();//获取焦点
+                this.textBox1.Select(this.textBox1.TextLength, 0);//光标定位到文本最后
+                this.textBox1.ScrollToCaret();//滚动到光标处
+                textBox2.Text += Convert.ToString(SpCom.ReceivedBytesThreshold);
+                //ReceivedBytesThreshold
+               
+                if (refreshModel != 0)
+                {
+                    refreshModel = 0;
+                    labelVendor.Text = Vendor;
+                    labelModel.Text = Model;
+                    labelSN.Text = SN;
+                    if (workState < 2){ SetFlag(workState); }               
+                }
+                #region 更新datagridview1
+                DataSet xmlDs = new DataSet();
+                try
+                {
+                    xmlDs.ReadXml(".\\DateRecive//" + saveFileName);
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show(ex.ToString());
+                    return;
+                }
+                this.dataGridView1.DataSource = xmlDs.Tables[0].DefaultView;
+                //移动光标至末行
+                dataGridView1.CurrentCell = dataGridView1.Rows[dataGridView1.Rows.Count - 1].Cells[0];
+                //dataGridView1.BeginEdit(true);
+                //dataGridView1.FirstDisplayedScrollingRowIndex = dataGridView1.Count - 1;
+                #endregion
+                if (ReDraw == 1)//更新tchart
+                {
+                    ReDraw = 0;                  
+                    AnimateSeries(this.tChart1);                    
+                }
+                //if (HIS_Nday > 0)
+                //{                   
+                //    for (HIS_loop = 1; HIS_loop < HIS_Nday; HIS_loop++)
+                //    {
+                //        AnimateSeriesHIST(this.tChart1, HIS_loop);
+                //    }
+                //    HIS_Nday = 0;
+                //}
+            };
+            //timer1.Enabled = true;
+            textBox1.Invoke(CrossDelete);
+            #endregion       
+            Data_recevie = 1;
         }
         #region 导出数据
         /// <summary>
@@ -773,25 +846,40 @@ namespace WindowsFormsApplication2
                 }
             }
         }
-        #endregion
+        #endregion      
       
-        private void trackBar1_ValueChanged(object source, EventArgs e)//interval set
-        {
-            trackBar1_Pos = trackBar1.Value;    //取得当前位置
-            timer1.Interval = trackBar1.Value*2000;
-            set_Interval = timer1.Interval;
-            textBox1.Text = trackBar1.Value.ToString();
-            label3.Text = Convert.ToString(trackBar1.Value * 2);//
-            //label3.Text = trackBar1.Value.ToString();
-            textBox2.Text = DateTime.Now.ToString();//调用内容，并用lable1显示出来。。。
-        }    
         private void timer1_Tick(object sender, EventArgs e)//定时向下位机发送read指令读取数据
         {
             if (PortIsOpen == 1)
             {
-                SpCom.Write("READ?\r\n");
+                SpCom.Write(B_READ);
             }
 
+        }
+        private void timer2_Tick(object sender, EventArgs e)//timer2用于更新读取的历史数据
+        {
+            if (workState == 3)
+            {
+                workState = 0;
+                SpCom.Close();
+
+                if (HIS_Nday > 0)
+                {
+                    for (HIS_loop = 1; HIS_loop < HIS_Nday; HIS_loop++)
+                    {
+                        AnimateSeriesHIST(this.tChart1, HIS_loop);
+                    }
+                    HIS_Nday = 0;
+                }
+                SetFlag(workState);//配置为初始状态
+            }
+            else if (workState == 4)//没有获取到有效数据。提示用户
+            {
+                workState = 0;
+                SpCom.Close();
+                MessageBox.Show("Not yet get valid data, please try again after confirmation");
+                SetFlag(workState);//配置为初始状态
+            }
         }
         private void dataGridView1_CellContentClick(object sender, DataGridViewCellEventArgs e)
         {
@@ -821,34 +909,7 @@ namespace WindowsFormsApplication2
             get { return this.set_COMport; }
             set { this.set_COMport = value; }
         }
-        //
-        public void ConfigComport(string com, int interval,bool IsWork)
-        {
-            if (Reconfig != 0)
-            {
-                Reconfig = 0;
-                fastLine1.Clear();//clear data
-                fastLine2.Clear();
-                fastLine3.Clear();
-
-                this.fastLine1.XValues.DateTime = true;
-                this.tChart1.Axes.Bottom.Labels.ValueFormat = "yyyy-MM-dd HH:mm:dd";
-
-                StartDate = DateTime.Now;
-                fastLine1.GetHorizAxis.SetMinMax(StartDate, StartDate.AddSeconds(200));
-            }
-            timer1.Enabled = false;
-            SpCom.Close();
-            PortIsOpen = 0;
-            SpCom.PortName = com;
-            timer1.Interval = interval * 1000;
-
-            SpCom.Open();
-            PortIsOpen = 1;
-            SpCom.Write("open the COM port "+com+" !");
-            timer1.Enabled = IsWork;
-        }
-
+        //     
         #region Menu click
         private void openToolStripMenuItem_Click(object sender, EventArgs e)//菜单树处理部分
         {
@@ -864,23 +925,40 @@ namespace WindowsFormsApplication2
             #endregion
         }
         //aboutVAToolStripMenuItem_Click
-        
+        private void printToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            tChart1.Printer.Print();
+        }
+
+        private void saveToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            MessageBox.Show("Data stored in the file 'DataRecive' by default!");
+        }
+
+        private void quitToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            Application.Exit();
+        }
+
         private void setToolStripMenuItem_Click(object sender, EventArgs e)
         {
 
         }
         private void advanceToolStripMenuItem_Click(object sender, EventArgs e)
         {
+            this.Enabled = false;
+            timer1.Enabled = false;
             Form2 Fm2 = new Form2(this);
             Fm2.Show();
             Fm2.Enabled = true;
         }
         private void cOMSetToolStripMenuItem_Click(object sender, EventArgs e)
         {
+            this.Enabled = false;
             ComSet Fm_comset = new ComSet(this);
             Fm_comset.Show();
             Fm_comset.Enabled = true;
-            this.Enabled = false;
+            
 
         }
         private void helpToolStripMenuItem_Click(object sender, EventArgs e)
@@ -897,126 +975,105 @@ namespace WindowsFormsApplication2
         }
 
         #endregion
-        private void button1_Click(object sender, EventArgs e)//open the commport
-        {
-            if (SpCom.IsOpen)
-            #region isopen
-            {
-                SpCom.Close();
-                comboBox1.Enabled = true;
-                button1.Text = "Open";
-                //MessageBox.Show("Close " + comboBox1.Text, "Messsage");
-                PortIsOpen = 0;
-                trackBar1.Enabled = true;
-                timer1.Enabled = false;
+        //private void button1_Click(object sender, EventArgs e)//open the commport
+        //{
+        //    if (SpCom.IsOpen)
+        //    #region isopen
+        //    {
+        //        SpCom.Close();
+        //        comboBox1.Enabled = true;
+        //        button1.Text = "Open";
+        //        //MessageBox.Show("Close " + comboBox1.Text, "Messsage");
+        //        PortIsOpen = 0;              
+        //        timer1.Enabled = false;
 
-                button3.Enabled = false;
-                button4.Enabled = false;
-                button5.Enabled = false;
-            }
-            #endregion
-            #region closed
-            else
-            {
-                set_COMport = comboBox1.Text;
-                SpCom.PortName = comboBox1.Text;
-                SpCom.Open();
-                comboBox1.Enabled = false;
-                button1.Text = "Close";
-                //MessageBox.Show("Open " + comboBox1.Text, "Messsage");
-                PortIsOpen = 1;
-                trackBar1.Enabled = false;
-                //timer1.Enabled = true;
-                button3.Enabled = true;
-                button4.Enabled = true;
-                button5.Enabled = true;
+        //        button3.Enabled = false;
+        //        button4.Enabled = false;
+        //    }
+        //    #endregion
+        //    #region closed
+        //    else
+        //    {
+        //        set_COMport = comboBox1.Text;
+        //        SpCom.PortName = comboBox1.Text;
+        //        SpCom.Open();
+        //        comboBox1.Enabled = false;
+        //        button1.Text = "Close";
+        //        //MessageBox.Show("Open " + comboBox1.Text, "Messsage");
+        //        PortIsOpen = 1;
+        //        //timer1.Enabled = true;
+        //        button3.Enabled = true;
+        //        button4.Enabled = true;
 
-                #region 重设横坐标值
-                fastLine1.Clear();//clear data
-                fastLine2.Clear();
-                fastLine3.Clear();
-                this.fastLine1.XValues.DateTime = true;
-                this.tChart1.Axes.Bottom.Labels.ValueFormat = "yyyy-MM-dd HH:mm:dd";
+        //        #region 重设横坐标值
+        //        fastLine1.Clear();//clear data
+        //        fastLine2.Clear();
+        //        fastLine3.Clear();
+        //        this.fastLine1.XValues.DateTime = true;
+        //        this.tChart1.Axes.Bottom.Labels.ValueFormat = "yyyy-MM-dd HH:mm:dd";
 
-                StartDate = DateTime.Now;
-                fastLine1.GetHorizAxis.SetMinMax(StartDate, StartDate.AddSeconds(200));
-                #endregion
-            }
-            #endregion
-        }
-        private void button2_Click(object sender, EventArgs e)//clear
-         { 
-             //SpCom.Write(textBox2.Text);
-             fastLine1.Clear();//clear data
-             fastLine2.Clear();
-             fastLine3.Clear();
+        //        StartDate = DateTime.Now;
+        //        fastLine1.GetHorizAxis.SetMinMax(StartDate, StartDate.AddSeconds(200));
+        //        #endregion
+        //    }
+        //    #endregion
+        //}      
+        //private void button2_Click(object sender, EventArgs e)//clear
+        // { 
+        //     //SpCom.Write(textBox2.Text);
+        //     fastLine1.Clear();//clear data
+        //     fastLine2.Clear();
+        //     fastLine3.Clear();
 
-         }
-        private void button3_Click(object sender, EventArgs e)//enable form2
-         {
-             //Form currentForm =Form.ActiveForm;
-             // Form2.Activate();
+        // }
+        //private void button3_Click(object sender, EventArgs e)//enable form2
+        // {
+        //     //Form currentForm =Form.ActiveForm;
+        //     // Form2.Activate();
 
-             Form2 Fm2 = new Form2(this);
-             Fm2.Show();
-             Fm2.Enabled = true;
+        //     Form2 Fm2 = new Form2(this);
+        //     Fm2.Show();
+        //     Fm2.Enabled = true;
 
-         } 
-        private void button4_Click(object sender, EventArgs e)
-         {
-             SpCom.Write("READ:HIST\r\n");
-             button4.Text = "wait...";//wait for data update
-             button4.Enabled = false;
-             button5.Enabled = false;
-         }
-        private void button5_Click(object sender, EventArgs e)
-        {
-            if (IsRead==0)
-            {
-                timer1.Enabled = true;
-                timer2.Enabled = false;
-                IsRead = 1;
-                button5.Text = "Stop";
-                button3.Enabled = false;
-                button4.Enabled = false;
+        // } 
+        //private void button4_Click(object sender, EventArgs e)//resd history
+        // {
+        //     SpCom.Write("READ:HIST\r\n");
+        //     button4.Text = "wait...";//wait for data update
+        //     button4.Enabled = false;
+        // }
+        //private void button5_Click(object sender, EventArgs e)
+        //{
+        //    if (IsRead==0)
+        //    {
+        //        timer1.Enabled = true;
+        //        timer2.Enabled = false;
+        //        IsRead = 1;
+        //        button3.Enabled = false;
+        //        button4.Enabled = false;
 
-                //fastLine1.Clear();//clear data
-                //fastLine2.Clear();
-                //fastLine3.Clear();
-                this.fastLine1.XValues.DateTime = true;
-                this.tChart1.Axes.Bottom.Automatic = false;
-                this.tChart1.Axes.Bottom.Labels.ValueFormat = "yyyy-MM-dd HH:mm:dd";
-            }
-            else
-            {
-                timer1.Enabled = false;
-                timer2.Enabled = true;
-                IsRead = 0;                
-                button5.Text = "Read";
-                button3.Enabled = true;
-                button4.Enabled = true;            
-                //#region 重设横坐标值
-                //StartDate = DateTime.Now;
-                //fastLine1.GetHorizAxis.SetMinMax(StartDate, StartDate.AddSeconds(200));
-                //#endregion
-            }
-        }
-        private void timer2_Tick(object sender, EventArgs e)
-        {
-            if (Data_recevie == 1)
-            { 
-                button4.Text = "History";//enable button4
-                button4.Enabled = true;
-                button5.Enabled = true;
-                this.fastLine1.XValues.DateTime = true;
-                this.tChart1.Axes.Bottom.Automatic = false;
-                this.tChart1.Axes.Bottom.Labels.ValueFormat = "yyyy-MM-dd HH:mm:dd";
-                StartDate = DateTime.Now;
-                fastLine1.GetHorizAxis.SetMinMax(StartDate, StartDate.AddSeconds(200));
-            }
-           
-        }
+        //        //fastLine1.Clear();//clear data
+        //        //fastLine2.Clear();
+        //        //fastLine3.Clear();
+        //        this.fastLine1.XValues.DateTime = true;
+        //        this.tChart1.Axes.Bottom.Automatic = false;
+        //        this.tChart1.Axes.Bottom.Labels.ValueFormat = "yyyy-MM-dd HH:mm:dd";
+        //    }
+        //    else
+        //    {
+        //        timer1.Enabled = false;
+        //        timer2.Enabled = true;
+        //        IsRead = 0;                
 
+        //        button3.Enabled = true;
+        //        button4.Enabled = true;            
+        //        //#region 重设横坐标值
+        //        //StartDate = DateTime.Now;
+        //        //fastLine1.GetHorizAxis.SetMinMax(StartDate, StartDate.AddSeconds(200));
+        //        //#endregion
+        //    }
+        //}
+        
         #region IMdiparent member
         public void ParentFoo()
         {
@@ -1027,37 +1084,242 @@ namespace WindowsFormsApplication2
 
         //启动按钮
         private void btnStart_Click(object sender, EventArgs e)
-        {
-            int loop=1;
-            while((Exist_COM[loop] != null)&&(loop<= Convert.ToInt32(Exist_COM[0])))
-            {
-                Test_port(Exist_COM[loop]);
-                //test
-            }
+        {          
+            var Whichbtn = sender as Button;
 
-            var serialports = this.Controls.OfType<SerialPort>();
-            for (int i = 1; i < serialports.Count(); i++)
+            if (Whichbtn == btnStart)
             {
-                serialports.ElementAt(i).
+                if (IsRead == 0)
+                {
+                    IsRead = 1;
+                    btnStart.Text = "Searching";
+                    btnStart.Enabled = false;
+                    btnHistory.Enabled = false;
+                    
+                    //准备好串口的扫描工作
+                }
+                else
+                {
+                    IsRead = 0;
+                    timer1.Enabled = false;                                
+                    SpCom.Close();
+                    SetFlag(Start);                    
+                        //停止串口数据发送与接收                 
+                }
             }
+            else if (Whichbtn == btnHistory)
+            {
+                workState = 2;
+                SetFlag(HistoryRead);
+                IsRead = 1;
+                //读取串口数据
+            }
+            if (IsRead == 1)
+            {
+                #region 轮询串口并等待
+                //用一个数组保存供测试用的serialport
+                SerialPort[] portcollect = new SerialPort[] { serialPort1, serialPort2, serialPort3, serialPort4, serialPort5,
+                                                serialPort6, serialPort7, serialPort8, serialPort9, serialPort10 };
+                PortTesting = "null";
+                var serialports = this.Controls.OfType<SerialPort>();
+                for (int i = 1; i < Convert.ToInt32(Exist_COM[0])+1; i++)
+                {
+                    //SerialPort tempPort = serialports.ElementAt(i); //this.Controls.Find(serialports.ElementAt(i),true)[0];               
+                    Test_port(portcollect[i-1], Exist_COM[i]);
+                }
+                Thread.Sleep(3000);//wait for data
+                #endregion
+                #region 获取到有可用机器信息端口
+                if (PortTesting != "null")
+                {
+                    //询问是否打开已检测到的端口
+                    if (MessageBox.Show("Find a available device in serial port " + PortTesting + ".You want to start from it ?", "CONFIRM",
+                                        MessageBoxButtons.OKCancel, MessageBoxIcon.Question) == DialogResult.OK)
+                    {
+                        for (int i = 1; i < Convert.ToInt32(Exist_COM[0]) + 1; i++)//关闭所有测试端口
+                        {//close test port
+                            portcollect[i - 1].Close();
+                        }
 
+                        Reconfig = 1;
+                        ConfigComport(SpCom, PortTesting, SetForm_interval);//打开串口开启定时读取下位机数据                     
+                        SpCom.DataReceived += new SerialDataReceivedEventHandler(SpCom_DataReceived);
+
+                        if (Whichbtn == btnStart)
+                        {
+                            SpCom.Write(B_READ);//读取数据                        
+                            timer1.Enabled = true;
+                            SetFlag(NormalRead);
+                        }
+                        else if (Whichbtn == btnHistory)
+                        {
+                            //SpCom.Write(IDN);
+                            //Thread.Sleep(200);
+                            SpCom.Write("READ:HIST\r\n");
+                            //这里需要等待历史数据接受完成  20160309 晚 待完成
+
+                        }
+                    }
+                    else
+                    {
+                        workState = 0;
+                        SetFlag(Start);
+                    }
+                }
+                #endregion
+                #region 未能成功获取到可用端口
+                else
+                {
+                    MessageBox.Show("Could not find any available model, can be manually choose from the menu.","Message");
+                    SetFlag(Start);//配置初始各状态位
+                }
+                #endregion
+            }
+         
+            //var serialports = this.Controls.OfType<SerialPort>();
+            //for (int i = 1; i < serialports.Count(); i++)
+            //{
+            //    serialports.ElementAt(i).
+            //}
         }
 
         //测试某个串口是否是当前需要找的
-        private bool Test_port(string com)
-        {
-           
-            ConfigComport(com, 2000, false);//打开串口不开启定时读取
-            SpCom.Write(IDN);
-
+        private bool Test_port(SerialPort port,string com)
+        {           
+            ConfigComport( port, com, 2000);//打开串口不开启定时读取
+            port.DataReceived += new SerialDataReceivedEventHandler(Test_DataReceived);
+            port.Write(IDN);
 
             return false;
         }
+
+        public void ConfigComport(SerialPort port, string com, int interval)
+        {
+            if (Reconfig != 0)
+            {
+                Reconfig = 0;
+                fastLine1.Clear();//clear data
+                fastLine2.Clear();
+                fastLine3.Clear();
+
+                this.fastLine1.XValues.DateTime = true;
+                this.tChart1.Axes.Bottom.Labels.ValueFormat = "yyyy-MM-dd HH:mm:dd";
+
+                StartDate = DateTime.Now;
+                fastLine1.GetHorizAxis.SetMinMax(StartDate, StartDate.AddSeconds(200));
+            }
+            timer1.Enabled = false;
+            timer1.Interval = interval * 1000;
+            port.Close();            
+            port.PortName = com;
+            //if (Func == 0) { port.DataReceived += new SerialDataReceivedEventHandler(SpCom_DataReceived); }
+            //使用独立的串口接收中断线程
+           // else{ port.DataReceived += new SerialDataReceivedEventHandler(Test_DataReceived); }
+            port.Open();
+            if (port == SpCom) { PortIsOpen = 1;}
+            
+            //port.Write("I know you are COM port " + com + " !\r\n");//test
+            //timer1.Enabled = true;
+        }
+
+        #region 扫描中断 通过检测返回的数据确认是否查到可用设备
         private void Test_DataReceived(object sender,
                     System.IO.Ports.SerialDataReceivedEventArgs e)
         {
+            var nowport = sender as SerialPort;
+            Thread.Sleep(50);
 
+            string strtemp = ""; 
+            try
+            {
+                strtemp = nowport.ReadExisting();
+            }
+            catch
+            {
+                ;
+            }
+            if (strtemp.Length > 12)//判断接收到的数据是否够长度
+            {
+                //if (strT.IndexOf(":V") > 0)
+                if (strtemp.Substring(0, 6) == "SN:V&A")               
+                {
+                    //读取到设备信息，也用作开始的设备查找
+                    PortTesting = nowport.PortName;//获取可用端口号
+
+                    string[] arrTemp = strtemp.Split(',');
+                    Vendor = arrTemp[0].Substring(3, 3);
+                    Model = arrTemp[1];
+                    SN = arrTemp[2];
+
+                    CrossThreadOperationControl SNDelete = delegate ()
+                    {
+                        //labelVendor.Text = arrTemp[0].Substring(3, 3);
+                        //labelModel.Text = arrTemp[1];
+                        //labelSN.Text = arrTemp[2];
+                        labelVendor.Text = Vendor;
+                        labelModel.Text = Model;
+                        labelSN.Text = SN;
+                    };
+                    labelVendorT.Invoke(SNDelete);
+                }   
+            }
+               
         }
+        #endregion
+
+        /// <summary>
+        /// 定时器使能，主要用于外部调用
+        /// </summary>
+        /// <param name="state"></param>
+        public void SetTimer1(bool state)
+        {
+            if (state == true){timer1.Enabled = true;}
+            else { timer1.Enabled = false; } 
+        }
+
+        /// <summary>
+        /// 配置各工作状态下标志位情况
+        /// </summary>
+        /// <param name="state"></param>
+        public void SetFlag(int state)
+        {
+            workState = state;    
+            if (workState == 0)//上电状态
+            {
+                timer2.Enabled = false;
+                cOMSetToolStripMenuItem.Enabled = true;
+                advanceToolStripMenuItem.Enabled = false;
+                btnStart.Text = "Start";
+                btnStart.Enabled = true;
+                btnHistory.Text = "History";
+                btnHistory.Enabled = true;                
+                IsRead = 0;
+                Reconfig = 0;
+
+            }
+            else if (workState == 1)//工作读取数据状态
+            {
+                cOMSetToolStripMenuItem.Enabled = false;
+                advanceToolStripMenuItem.Enabled = true;
+                btnStart.Text = "Stop";
+                btnStart.Enabled = true;
+                btnHistory.Text = "History";
+                btnHistory.Enabled = false;
+                IsRead = 1;
+                Reconfig = 0;
+            }
+            else if (workState == 2)//读取历史数据状态
+            {
+                timer2.Enabled = true;
+                advanceToolStripMenuItem.Enabled = false;
+                btnStart.Text = "Start";
+                btnStart.Enabled = false;
+                btnHistory.Text = "Waiting";
+                btnHistory.Enabled = false;
+                IsRead = 0;
+                Reconfig = 0;
+            }              
+        }      
 
         #region click to change skin theme
         private void button6_Click(object sender, EventArgs e)
@@ -1080,6 +1342,74 @@ namespace WindowsFormsApplication2
         #endregion
 
 
+        #region 获取USB串口插拔消息
+        //// usb消息定义
+        //public const int WM_DEVICE_CHANGE = 0x219;
+        //public const int DBT_DEVICEARRIVAL = 0x8000;
+        //public const int DBT_DEVICE_REMOVE_COMPLETE = 0x8004;
+        //public const UInt32 DBT_DEVTYP_PORT = 0x00000003;
+        //[StructLayout(LayoutKind.Sequential)]
+        //struct DEV_BROADCAST_HDR
+        //{
+        //    public UInt32 dbch_size;
+        //    public UInt32 dbch_devicetype;
+        //    public UInt32 dbch_reserved;
+        //}
+
+        //[StructLayout(LayoutKind.Sequential)]
+        //protected struct DEV_BROADCAST_PORT_Fixed
+        //{
+        //    public uint dbcp_size;
+        //    public uint dbcp_devicetype;
+        //    public uint dbcp_reserved;
+        //    // Variable?length field dbcp_name is declared here in the C header file.
+        //}
+
+        ///// <summary>
+        ///// 检测USB串口的拔插
+        ///// </summary>
+        ///// <param name="m"></param>
+        //protected override void WndProc(ref Message m)
+        //{
+        //    if (m.Msg == WM_DEVICE_CHANGE)        // 捕获USB设备的拔出消息WM_DEVICECHANGE
+        //    {
+        //        switch (m.WParam.ToInt32())
+        //        {
+        //            case DBT_DEVICE_REMOVE_COMPLETE:    // USB拔出 
+        //                try { SpCom.Close(); }
+        //                catch { MessageBox.Show("removed!"); }
+        //                break;
+        //            case DBT_DEVICEARRIVAL:             // USB插入获取对应串口名称
+        //                DEV_BROADCAST_HDR dbhdr = (DEV_BROADCAST_HDR)Marshal.PtrToStructure(m.LParam, typeof(DEV_BROADCAST_HDR));
+        //                if (dbhdr.dbch_devicetype == DBT_DEVTYP_PORT)//若是串口设备则尝试辨认
+        //                {
+        //                    int templong = Marshal.SizeOf(typeof(DEV_BROADCAST_PORT_Fixed));
+        //                    SpCom.PortName = Marshal.PtrToStringUni((IntPtr)(m.LParam.ToInt64() + Marshal.SizeOf(typeof(DEV_BROADCAST_PORT_Fixed))));
+        //                    Reconfig = 1;
+        //                    ConfigComport(SpCom, SpCom.PortName, SetForm_interval);//打开串口开启定时读取下位机数据                     
+        //                    SpCom.DataReceived += new SerialDataReceivedEventHandler(SpCom_DataReceived);
+        //                    SpCom.Write(IDN);
+        //                    /*Thread.Sleep(300);
+        //                    if (PortTesting != "null")
+        //                    {
+        //                        if (MessageBox.Show("Find a available device in serial port " + PortTesting + ".You want to start from it ?", "CONFIRM",
+        //                                            MessageBoxButtons.OKCancel, MessageBoxIcon.Question) == DialogResult.OK)
+        //                        {
+        //                            SpCom.Close();
+
+        //                            Reconfig = 1;
+        //                            ConfigComport(SpCom, PortTesting, SetForm_interval);//打开串口开启定时读取下位机数据                     
+        //                            SpCom.DataReceived += new SerialDataReceivedEventHandler(SpCom_DataReceived);                                 
+        //                        }
+        //                    }*/
+
+        //                }
+        //                break;
+        //        }
+        //    }
+        //    base.WndProc(ref m);
+        //}
+        #endregion
 
     }
 }
