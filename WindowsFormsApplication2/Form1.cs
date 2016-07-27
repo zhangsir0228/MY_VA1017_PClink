@@ -54,7 +54,7 @@ namespace WindowsFormsApplication2
         int refreshModel = 0;
 
         string saveFileName;
-        String  strT;
+        String  strT;//串口接收数据
         string IDN = "*IDN?\r\n";
         string  B_READ = "READ?\r\n";
         String  B_SN = "SN:";
@@ -62,7 +62,7 @@ namespace WindowsFormsApplication2
         string  PortTesting = "null";//改标志大于0时表示当前正在测试数值对应的COMx端口  
 
         string  set_COMport = "";//COMport from set form
-        int     set_Interval = 2;//interval from set form
+        int     set_Interval = 5;//interval from set form
 
         MatchCollection vMatchs;
         String[] vfloats = new String[100];
@@ -147,6 +147,12 @@ namespace WindowsFormsApplication2
             SetFlag(Start);//配置初始各状态位
 
             tChart1.Zoom.Allow = true;
+            //RefreshTimer.Interval = 200;
+            //RefreshTimer.Enabled = true;
+            if (this.Width > Screen.PrimaryScreen.Bounds.Width)
+                this.Width = Screen.PrimaryScreen.Bounds.Width;
+            if (this.Height > Screen.PrimaryScreen.Bounds.Height)
+                this.Height = Screen.PrimaryScreen.Bounds.Height;
 
 
             #region Comport Init
@@ -172,7 +178,7 @@ namespace WindowsFormsApplication2
 
             SpCom.PortName = "COM3";
             SpCom.BaudRate = 9600;
-            SpCom.ReadBufferSize = 12000;
+            SpCom.ReadBufferSize = 100000;//100K    1800*38byte =68.4K
 
             SpCom.DataReceived += new SerialDataReceivedEventHandler(SpCom_DataReceived);
 
@@ -181,19 +187,19 @@ namespace WindowsFormsApplication2
             #endregion
 
             #region 配置初始坐标信息
-            StartDate = DateTime.Now;          
+            StartDate = DateTime.Now;     
+            
+              
 
-            fastLine1.Add(StartDate.ToOADate(), 50);//初始TDS
+            fastLine1.Add(StartDate.ToOADate(), 250);//初始TDS
             fastLine2.Add(StartDate.ToOADate(), 20);//初始Temp
             fastLine3.Add(StartDate.ToOADate(), 0);//初始流量
-
-            fastLine1.GetVertAxis.SetMinMax(0, 500);
-            fastLine2.GetVertAxis.SetMinMax(0, 50);
-            fastLine3.GetVertAxis.SetMinMax(0, 500);
-
-            TDS_max = 500; TDS_min = 0;
-            Temp_max = 50;Temp_min = 0;
-            L_max = 500; L_min = 0;
+            TDS_max = 320; TDS_min = 280;
+            Temp_max = 22;Temp_min = 20;
+            L_max = 2; L_min = 0;   
+            fastLine1.GetVertAxis.SetMinMax(TDS_min, TDS_max);
+            fastLine2.GetVertAxis.SetMinMax(Temp_min, Temp_max);
+            fastLine3.GetVertAxis.SetMinMax(L_min, L_max);
 
             fastLine1.GetHorizAxis.SetMinMax(StartDate, StartDate.AddSeconds(120));
             //getxmlre=fastLine1.
@@ -210,7 +216,7 @@ namespace WindowsFormsApplication2
                 sXml += "<date>";
                 sXml += "<cond>0</cond>";	//1
                 sXml += "<tmp>20</tmp>";			            //2	
-                sXml += "<total_L>0</total_L>";		        //3
+                sXml += "<flowV>0</flowV>";		        //3
                 sXml += "<day>null</day>";			            //4
                 sXml += "<time>" + saveFileName + "</time>";	//5
                 sXml += "</date>";
@@ -245,6 +251,15 @@ namespace WindowsFormsApplication2
             this.dataGridView1.DataSource = xmlDs.Tables[0].DefaultView;
             #endregion
 
+            #region 测试后去当前系统整数分隔符
+            //System.Globalization.CultureInfo.CurrentCulture.NumberFormat.CurrencyDecimalSeparator
+            //NumberFormatInfo.CurrencyDecimalSeparator
+
+            string iitest = System.Globalization.CultureInfo.CurrentCulture.NumberFormat.CurrencyDecimalSeparator;
+
+            #endregion
+
+
             #region test teechart
             ////some sample data for the pyramids...
             //axTChart1.Series(0).FillSampleValues(8);
@@ -256,28 +271,28 @@ namespace WindowsFormsApplication2
             //axTChart1.Zoom.Enable = false;
             //axTChart1.Scroll.Enable = TeeChart.EChartScroll.pmNone;
             //#endregion
-           #region 测试chart
-           // float[][] data = new float[3][];
-           // //第一条数据
-           // data[0] = new float[10] { 1.3f, 2.5f, 2.1f, 3.3f, 2.8f, 3.9f, 4.3f, 3.6f, 4.2f, 3.6f };
-           // //第二条数据
-           // data[1] = new float[12] { -2f, -1.3f, 0.1f, 0.5f, -1.5f, 0.7f, 1f, 1.4f, 1.9f, 2f, 2.6f, 3.1f };
-           // //第三条数据
-           // data[2] = new float[10] { 7.8f, 9.2f, 6.5f, 8.3f, 9.0f, 5.9f, 6.3f, 7.2f, 8.8f, 9.8f };
+            #region 测试chart
+            // float[][] data = new float[3][];
+            // //第一条数据
+            // data[0] = new float[10] { 1.3f, 2.5f, 2.1f, 3.3f, 2.8f, 3.9f, 4.3f, 3.6f, 4.2f, 3.6f };
+            // //第二条数据
+            // data[1] = new float[12] { -2f, -1.3f, 0.1f, 0.5f, -1.5f, 0.7f, 1f, 1.4f, 1.9f, 2f, 2.6f, 3.1f };
+            // //第三条数据
+            // data[2] = new float[10] { 7.8f, 9.2f, 6.5f, 8.3f, 9.0f, 5.9f, 6.3f, 7.2f, 8.8f, 9.8f };
 
-           // for (int i = 0; i < data.Length; i++)
-           // {
-           //     //横坐标时间
-           //     DateTime dt = DateTime.Now.Date;
-           //     Series series = this.SetSeriesStyle(i);
-           //     for (int j = 0; j < data[i].Length; j++)
-           //     {
-           //         series.Points.AddXY(dt, data[i][j]);
-           //         dt = dt.AddDays(1);
-           //     }
-           //     this.chart1.Series.Add(series);
-           // }
-           #endregion
+            // for (int i = 0; i < data.Length; i++)
+            // {
+            //     //横坐标时间
+            //     DateTime dt = DateTime.Now.Date;
+            //     Series series = this.SetSeriesStyle(i);
+            //     for (int j = 0; j < data[i].Length; j++)
+            //     {
+            //         series.Points.AddXY(dt, data[i][j]);
+            //         dt = dt.AddDays(1);
+            //     }
+            //     this.chart1.Series.Add(series);
+            // }
+            #endregion
             //string sss = "DA:1234 us/cm,56.7 degC,12345 L/r/n";
             //MatchCollection vMatchs = Regex.Matches(sss, @"\d+\.\d+");
             //float[] vfloats = new float[vMatchs.Count];
@@ -285,16 +300,22 @@ namespace WindowsFormsApplication2
             //{
             //    vfloats[i] = float.Parse(vMatchs[i].Value);
             //}
-           
+
 
             //num=int.Parse(numS);//测试字符转数组
             //SpCom.Open();
             ////新建一个线程
             //Thread newthread = new Thread(new ThreadStart(BackgroundProcess));
             //newthread.Start(); 
-                
 
-#endregion
+
+            #endregion
+        }
+
+        private void Form1_SizeChanged(object sender, EventArgs e)//窗口大小改变
+        {      
+            //this.skinEngine1.SkinFile = "E:\\zhangyu\\VA1017\\VA1017 soft\\20150920_code_20151207\\WindowsFormsApplication2\\bin" +
+            //"\\Debug\\interface_ssk\\MacOS.ssk";
         }
 
         private void AnimateSeries(Steema.TeeChart.TChart chart)
@@ -312,47 +333,50 @@ namespace WindowsFormsApplication2
             //    fastLine1.GetHorizAxis.SetMinMax(DateTime.Now.AddSeconds(-15), DateTime.Now.AddSeconds(+100));
             //}
 
-            newX = DateTime.Now.ToOADate();
-            newY = double.Parse(vfloats[0]);
-            if (Math.Abs(newY) > 1.0e+4) newY = 0.0;
+            
             #region 动态调整坐标轴
          
             if (double.Parse(vfloats[0]) > TDS_max)//TDS坐标
             {
                 TDS_max = double.Parse(vfloats[0]);
-                fastLine1.GetVertAxis.SetMinMax(TDS_min, TDS_max + TDS_max/2);//防止显示数据在最上面
+                fastLine1.GetVertAxis.SetMinMax(TDS_min, TDS_max + TDS_max+50);//防止显示数据在最上面
             }
             else if (double.Parse(vfloats[0]) < TDS_min)
             {
                 TDS_min = double.Parse(vfloats[0]);
-                fastLine1.GetVertAxis.SetMinMax(TDS_min, TDS_max+500);
+                fastLine1.GetVertAxis.SetMinMax(TDS_min-50, TDS_max);
             }
             if (double.Parse(vfloats[1]) > Temp_max)//temp坐标
             {
                 Temp_max = double.Parse(vfloats[1]);
-                fastLine2.GetVertAxis.SetMinMax(Temp_min, Temp_max+5);
+                fastLine2.GetVertAxis.SetMinMax(Temp_min, Temp_max+1);
             }
             else if (double.Parse(vfloats[1]) < Temp_min)
             {
                 Temp_min = double.Parse(vfloats[1]);
-                fastLine2.GetVertAxis.SetMinMax(Temp_min, Temp_max+5);
+                fastLine2.GetVertAxis.SetMinMax(Temp_min-1, Temp_max);
             }
             if (double.Parse(vfloats[2]) > L_max)//L坐标
             {
                 L_max = double.Parse(vfloats[2]);
-                fastLine3.GetVertAxis.SetMinMax(L_min, L_max+50);
+                fastLine3.GetVertAxis.SetMinMax(L_min, L_max+1);
             }
-            else if (double.Parse(vfloats[2]) < TDS_min)
+            else if (double.Parse(vfloats[2]) < L_min)
             {
                 L_min = double.Parse(vfloats[2]);
-                fastLine3.GetVertAxis.SetMinMax(L_min, L_max+50);
+                fastLine3.GetVertAxis.SetMinMax(L_min, L_max);
             }
 
             #endregion
+            newX = DateTime.Now.ToOADate();
 
+            newY = double.Parse(vfloats[0]);
+            if (Math.Abs(newY) > 1.0e+4) newY = 0.0;
             fastLine1.Add(newX, newY);//新增数据绘制部分
-            newY = double.Parse(vfloats[1]);
+
+            newY = double.Parse(vfloats[1]);            
             fastLine2.Add(newX, newY);
+
             newY = double.Parse(vfloats[2]);
             fastLine3.Add(newX, newY);
             
@@ -585,7 +609,6 @@ namespace WindowsFormsApplication2
         public void SpCom_DataReceived(object sender,
                          System.IO.Ports.SerialDataReceivedEventArgs e)
         {
-
             if (workState == 2)//历史数据读取时等待长一点时间
             {
                 Thread.Sleep(5000);//wait for data
@@ -594,7 +617,6 @@ namespace WindowsFormsApplication2
             {
                 Thread.Sleep(50);//wait for data
             }
-
             try
             {
                 strT = SpCom.ReadExisting();
@@ -603,10 +625,10 @@ namespace WindowsFormsApplication2
             {
                 ;
             }
-            
 
+            #region  所有接收处理部分  
             if (strT.Length > 12)//判断接收到的数据是否够长度
-            { 
+            {
                 #region 如果接受到的是数据字符串
                 if (strT.Substring(0, 3) == "DA:")
                 {
@@ -621,6 +643,11 @@ namespace WindowsFormsApplication2
                         vfloats[i] = /*float.Parse*/(vMatchs[i].Value);
                     }
                     #endregion
+
+                    if (System.Globalization.CultureInfo.CurrentCulture.NumberFormat.CurrencyDecimalSeparator == ",")
+                    {//若当前系统分隔符为逗号则将点转为逗号，之后的系统函数都是以逗号为准
+                        vfloats[1] = vfloats[1].Replace(".", ",");
+                    }
 
                     #region 向xml保存接收的数据条
                     XmlDocument xmlDoc = new XmlDocument();
@@ -640,7 +667,7 @@ namespace WindowsFormsApplication2
                     xesub2.InnerText = vfloats[1];
                     xe1.AppendChild(xesub2);
 
-                    XmlElement xesub3 = xmlDoc.CreateElement("total_L");
+                    XmlElement xesub3 = xmlDoc.CreateElement("flowV");
                     xesub3.InnerText = vfloats[2];
                     xe1.AppendChild(xesub3);
 
@@ -738,9 +765,8 @@ namespace WindowsFormsApplication2
                     //else { workState = 3; }//从开始读历史状态进入确认读取历史书状态
                 }
                 #endregion
-                else if(workState == 2)
+                else if (workState == 2)
                 {
-                    
                     workState = 4;
                 }
             }
@@ -748,20 +774,20 @@ namespace WindowsFormsApplication2
             // 将代理实例化为一个匿名代理 
             CrossThreadOperationControl CrossDelete = delegate ()
             {
-                textBox1.Text += Convert.ToString(DateCount) + strT;
-                this.textBox1.Focus();//获取焦点
-                this.textBox1.Select(this.textBox1.TextLength, 0);//光标定位到文本最后
-                this.textBox1.ScrollToCaret();//滚动到光标处
-                textBox2.Text += Convert.ToString(SpCom.ReceivedBytesThreshold);
-                //ReceivedBytesThreshold
-               
+                //textBox1.Text += Convert.ToString(DateCount) + strT;
+                //this.textBox1.Focus();//获取焦点
+                //this.textBox1.Select(this.textBox1.TextLength, 0);//光标定位到文本最后
+                //this.textBox1.ScrollToCaret();//滚动到光标处
+                //textBox2.Text += Convert.ToString(SpCom.ReceivedBytesThreshold);
+                ////ReceivedBytesThreshold
+
                 if (refreshModel != 0)
                 {
                     refreshModel = 0;
                     labelVendor.Text = Vendor;
                     labelModel.Text = Model;
                     labelSN.Text = SN;
-                    if (workState < 2){ SetFlag(workState); }               
+                    if (workState < 2) { SetFlag(workState); }
                 }
                 #region 更新datagridview1
                 DataSet xmlDs = new DataSet();
@@ -782,21 +808,13 @@ namespace WindowsFormsApplication2
                 #endregion
                 if (ReDraw == 1)//更新tchart
                 {
-                    ReDraw = 0;                  
-                    AnimateSeries(this.tChart1);                    
+                    ReDraw = 0;
+                    AnimateSeries(this.tChart1);
                 }
-                //if (HIS_Nday > 0)
-                //{                   
-                //    for (HIS_loop = 1; HIS_loop < HIS_Nday; HIS_loop++)
-                //    {
-                //        AnimateSeriesHIST(this.tChart1, HIS_loop);
-                //    }
-                //    HIS_Nday = 0;
-                //}
             };
-            //timer1.Enabled = true;
-            textBox1.Invoke(CrossDelete);
-            #endregion       
+            this.Invoke(CrossDelete);
+            #endregion
+            #endregion
             Data_recevie = 1;
         }
         #region 导出数据
@@ -846,8 +864,7 @@ namespace WindowsFormsApplication2
                 }
             }
         }
-        #endregion      
-      
+        #endregion           
         private void timer1_Tick(object sender, EventArgs e)//定时向下位机发送read指令读取数据
         {
             if (PortIsOpen == 1)
@@ -908,8 +925,7 @@ namespace WindowsFormsApplication2
         {
             get { return this.set_COMport; }
             set { this.set_COMport = value; }
-        }
-        //     
+        }    
         #region Menu click
         private void openToolStripMenuItem_Click(object sender, EventArgs e)//菜单树处理部分
         {
@@ -1072,8 +1088,7 @@ namespace WindowsFormsApplication2
         //        //fastLine1.GetHorizAxis.SetMinMax(StartDate, StartDate.AddSeconds(200));
         //        //#endregion
         //    }
-        //}
-        
+        //}   
         #region IMdiparent member
         public void ParentFoo()
         {
@@ -1214,12 +1229,19 @@ namespace WindowsFormsApplication2
             port.PortName = com;
             //if (Func == 0) { port.DataReceived += new SerialDataReceivedEventHandler(SpCom_DataReceived); }
             //使用独立的串口接收中断线程
-           // else{ port.DataReceived += new SerialDataReceivedEventHandler(Test_DataReceived); }
-            port.Open();
+            // else{ port.DataReceived += new SerialDataReceivedEventHandler(Test_DataReceived); }
+            try { port.Open(); }
+            catch {; }
+            
             if (port == SpCom) { PortIsOpen = 1;}
             
             //port.Write("I know you are COM port " + com + " !\r\n");//test
             //timer1.Enabled = true;
+        }
+
+        private void label_title_Click(object sender, EventArgs e)
+        {
+
         }
 
         #region 扫描中断 通过检测返回的数据确认是否查到可用设备
@@ -1319,26 +1341,26 @@ namespace WindowsFormsApplication2
                 IsRead = 0;
                 Reconfig = 0;
             }              
-        }      
-
+        }
+      
         #region click to change skin theme
-        private void button6_Click(object sender, EventArgs e)
-        {
-            this.skinEngine1.SkinFile = "E:\\zhangyu\\VA1017\\VA1017 soft\\20150920_code_20151207\\WindowsFormsApplication2\\bin" +
-            "\\Debug\\interface_ssk\\SteelBlue.ssk";
-        }
+        //private void button6_Click(object sender, EventArgs e)
+        //{
+        //    this.skinEngine1.SkinFile = "E:\\zhangyu\\VA1017\\VA1017 soft\\20150920_code_20151207\\WindowsFormsApplication2\\bin" +
+        //    "\\Debug\\interface_ssk\\SteelBlue.ssk";
+        //}
 
-        private void button7_Click(object sender, EventArgs e)
-        {
-            this.skinEngine1.SkinFile = "E:\\zhangyu\\VA1017\\VA1017 soft\\20150920_code_20151207\\WindowsFormsApplication2\\bin" +
-            "\\Debug\\interface_ssk\\WaveColor2.ssk";
-        }
+        //private void button7_Click(object sender, EventArgs e)
+        //{
+        //    this.skinEngine1.SkinFile = "E:\\zhangyu\\VA1017\\VA1017 soft\\20150920_code_20151207\\WindowsFormsApplication2\\bin" +
+        //    "\\Debug\\interface_ssk\\WaveColor2.ssk";
+        //}
 
-        private void button8_Click(object sender, EventArgs e)
-        {
-            this.skinEngine1.SkinFile = "E:\\zhangyu\\VA1017\\VA1017 soft\\20150920_code_20151207\\WindowsFormsApplication2\\bin" +
-             "\\Debug\\interface_ssk\\SilverColor2.ssk";
-        }
+        //private void button8_Click(object sender, EventArgs e)
+        //{
+        //    this.skinEngine1.SkinFile = "E:\\zhangyu\\VA1017\\VA1017 soft\\20150920_code_20151207\\WindowsFormsApplication2\\bin" +
+        //     "\\Debug\\interface_ssk\\SilverColor2.ssk";
+        //}
         #endregion
 
 

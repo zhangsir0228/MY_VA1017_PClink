@@ -124,4 +124,10 @@
   <data name="_590c4b55ca_64" type="System.Resources.ResXFileRef, System.Windows.Forms">
     <value>..\590c4b55ca_64.ico;System.Drawing.Icon, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
   </data>
+  <data name="elysator_logo_cmyk_20cm" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\elysator_logo_cmyk_20cm.jpg;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
+  </data>
+  <data name="ELOG_1_" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\ELOG(1).tif;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
+  </data>
 </root>
